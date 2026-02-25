@@ -11,7 +11,6 @@ class AgentState(TypedDict):
 
 from tools import get_llm_with_tools, lookup_policy_docs, rss_feed_search,web_search
 llm,llm_with_tools,tools=get_llm_with_tools()
-
 def researcher_node(state:AgentState):
     last_message=state["messages"][-1]
     sys_msg=SystemMessage(content="You are a data gatherer. Use tools.")
@@ -31,21 +30,28 @@ def researcher_node(state:AgentState):
         elif tool_name=="rss_feed_search":
             res=rss_feed_search.invoke(q)
         
-        research_findings.append(f"Tool:{tool_name}\nData:{res}")
-    return {"messages":[res],"reseacher_data":research_findings}
-
+        research_findings.append(f"Source:{tool_name}\nData:{res}")
+    return {"messages":[res],"researcher_data":research_findings}
 
 def analyst_node(state:AgentState):
     raw_data="\n\n".join(state["researcher_data"])
-
-    prompt=f"You are a senior analyst.extract trends and numeric data.\n{raw_data}"
-
+    prompt=f"Your are a senior analyst. extract trend and numeric data.\n{raw_data}"
     response=llm.invoke(prompt)
-    return {"messages":[response],"chart_data":[]}
+    return{"messages":[response],"chart_data":[]}
+
 workflow=StateGraph(AgentState)
 workflow.add_node("Researcher",researcher_node)
+workflow.add_node("Analyst",analyst_node)
+workflow.add_node("Writer",writer_node)
 workflow.set_entry_point("Researcher")
-workflow.add_edge("Researcher",END)
+workflow.add_edge("Researcher","Analyst")
+workflow.add_edge("Analyst","Writer")
+workflow.add_edge("Writer",END)
 
-workflow.compile()
-    
+app = workflow.compile()
+if __name__ == "__main__":
+    user_topic = "latest AI trends and internal productivity reports"
+    {"messages":[HumanMessage(content=user_topic)],"researcher_data":[]}
+    for output in app.stream(inputs):
+        pass
+    print(output["Writer"]['message'][-1].content)
